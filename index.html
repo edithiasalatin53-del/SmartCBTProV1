@@ -251,7 +251,7 @@ body { background:#fff!important; color:#111!important; padding:0!important; mar
 <div id="print-area" class="print-area hidden"></div>
 </div>
 <script>
-var API_URL = 'https://script.google.com/macros/s/AKfycby2SYXfBjvFK6ClLXhBQXUxaVG9oKZRxO51qGT64ScdGLToRLYS8MwF256qqLPj9VKcyw/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbyKqKDKjMQ7MtXTa1vtrflS5detWbEkx9z0rrxPPdUTHID8AtzOwPgNclZWkAiMQerOKQ/exec';
 
 function getFileDisplayUrl(fileId, type) {
   if (!fileId) return '';
@@ -2705,32 +2705,83 @@ document.getElementById('te').classList.add('hidden');
 document.getElementById('itk').focus();
 };
 EX.etk = function() {
-var tk = document.getElementById('itk').value.trim().toUpperCase();
-var err = document.getElementById('te'); var btn = document.getElementById('btk');
-if (!tk) { err.textContent = 'Masukkan token'; err.classList.remove('hidden'); return; }
-err.classList.add('hidden'); btn.disabled = true; btn.textContent = 'Menghubungkan...';
-G('joinExam', { token: tk, siswa_id: U.id, siswa_nama: U.nama, kelas: U.kelas || '' })
-.then(function(r) {
-btn.disabled = false; btn.textContent = 'Mulai';
-if (!r.s) { err.textContent = r.error; err.classList.remove('hidden'); return; }
-EX.token = tk;
-hiM('mt');
-var elem = document.documentElement;
-if (elem.requestFullscreen) {
-elem.requestFullscreen().catch(function(e) { console.log("Fullscreen error:", e); });
-} else if (elem.webkitRequestFullscreen) {
-elem.webkitRequestFullscreen();
-} else if (elem.msRequestFullscreen) {
-elem.msRequestFullscreen();
-}
-if (screen.orientation && screen.orientation.lock) {
-screen.orientation.lock('landscape').catch(function(e) { console.log("Orientation lock error:", e); });
-}
-EX.start(r.d);
-}).catch(function(e) {
-btn.disabled = false; btn.textContent = 'Mulai';
-err.textContent = String(e); err.classList.remove('hidden');
-});
+  var tk = document.getElementById('itk').value.trim().toUpperCase();
+  var err = document.getElementById('te'); 
+  var btn = document.getElementById('btk');
+  
+  if (!tk) { 
+    err.textContent = 'Masukkan token'; 
+    err.classList.remove('hidden'); 
+    return; 
+  }
+  
+  err.classList.add('hidden'); 
+  btn.disabled = true; 
+  btn.textContent = 'Memeriksa...';
+  
+  // ✅ LANGKAH BARU: Cek dulu apakah siswa sudah pernah mengerjakan
+  G('checkExamAttempt', { 
+    token: tk, 
+    siswa_id: U.id 
+  })
+  .then(function(checkRes) {
+    // Jika backend mengembalikan error "sudah dikerjakan"
+    if (checkRes.s && checkRes.d && checkRes.d.alreadyTaken) {
+      btn.disabled = false; 
+      btn.textContent = 'Mulai';
+      err.textContent = '⚠ Anda sudah mengerjakan ujian ini. Hubungi admin untuk reset.';
+      err.classList.remove('hidden');
+      return;
+    }
+    
+    // Jika lolos, lanjutkan ke joinExam
+    btn.textContent = 'Menghubungkan...';
+    return G('joinExam', { 
+      token: tk, 
+      siswa_id: U.id, 
+      siswa_nama: U.nama, 
+      kelas: U.kelas || '' 
+    });
+  })
+  .then(function(r) {
+    if (!r) return; // Sudah di-handle di atas
+    
+    btn.disabled = false; 
+    btn.textContent = 'Mulai';
+    
+    if (!r.s) { 
+      err.textContent = r.error || 'Gagal bergabung'; 
+      err.classList.remove('hidden'); 
+      return; 
+    }
+    
+    EX.token = tk;
+    hiM('mt');
+    
+    // Fullscreen & orientation lock
+    var elem = document.documentElement;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen().catch(function(e) { console.log("Fullscreen error:", e); });
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen();
+    } else if (elem.msRequestFullscreen) {
+      elem.msRequestFullscreen();
+    }
+    
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(function(e) { 
+        console.log("Orientation lock error:", e); 
+      });
+    }
+    
+    EX.start(r.d);
+  })
+  .catch(function(e) {
+    btn.disabled = false; 
+    btn.textContent = 'Mulai';
+    err.textContent = 'Error: ' + String(e); 
+    err.classList.remove('hidden');
+  });
 };
 EX.start = function(data) {
 hiM('mt');
@@ -2899,120 +2950,180 @@ if (EX.tl === 300 && el) el.style.color = '#f87171';
 }, 1000);
 };
 EX.cf = function() {
-var unansweredQ = [];
-EX.soal.forEach(function(q, idx) {
-var ans = EX.answers[q.id];
-if (!ans || String(ans).trim() === '') {
-unansweredQ.push(idx + 1);
-}
-});
-var unanswered = unansweredQ.length;
-var raguC = Object.values(EX.ragu).filter(function(v) { return v; }).length;
-if (unanswered > 0) {
-var mb = document.getElementById('mb');
-if (mb) {
-mb.innerHTML = '<div class="text-center">' +
-'<div class="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">' +
-'<i data-lucide="alert-triangle" class="w-8 h-8 text-yellow-400"></i></div>' +
-'<h3 class="text-xl font-bold text-yellow-400 mb-2">Masih Ada Soal Belum Dijawab!</h3>' +
-'<p class="text-sm text-gray-400 mb-4">Anda <strong class="text-white">tidak dapat mengumpulkan</strong> ujian karena masih ada <strong class="text-yellow-300">' + unanswered + ' soal</strong> yang belum dijawab.</p>' +
-'<div class="bg-white/5 rounded-xl p-4 mb-4 max-h-48 overflow-y-auto">' +
-'<p class="text-xs text-gray-400 mb-3 text-left">Nomor soal yang belum dijawab:</p>' +
-'<div class="flex flex-wrap gap-2 justify-center">' +
-unansweredQ.map(function(n) {
-return '<span class="w-9 h-9 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 flex items-center justify-center text-sm font-bold">' + n + '</span>';
-}).join('') +
-'</div></div>' +
-(raguC > 0 ? '<p class="text-xs text-yellow-400 mb-3 bg-yellow-500/10 rounded-lg p-2">⚠ Ada ' + raguC + ' soal yang Anda tandai ragu-ragu.</p>' : '') +
-'<p class="text-xs text-gray-500 mb-4">Silakan klik nomor soal di atas atau periksa kembali seluruh jawaban Anda.</p>' +
-'<button onclick="hiM(\'mg\')" class="bp px-6 py-3 rounded-xl font-semibold w-full">Periksa Kembali</button>' +
-'</div>';
-shM('mg');
-ic();
-}
-return;
-}
-var msg = '✅ Semua soal sudah dijawab.\n';
-if (raguC > 0) {
-msg += '⚠ Perhatian: Ada ' + raguC + ' soal yang Anda tandai ragu.\n';
-}
-msg += 'Yakin ingin mengumpulkan ujian sekarang?';
-if (!confirm(msg)) return;
-EX.submit();
+  // ✅ Cegah multiple click
+  if (EX._submitting || EX._submitted) {
+    toast('Ujian sedang diproses...', 'warning');
+    return;
+  }
+  
+  var unansweredQ = [];
+  EX.soal.forEach(function(q, idx) {
+    var ans = EX.answers[q.id];
+    if (!ans || String(ans).trim() === '') {
+      unansweredQ.push(idx + 1);
+    }
+  });
+  
+  var unanswered = unansweredQ.length;
+  var raguC = Object.values(EX.ragu).filter(function(v) { return v; }).length;
+  
+  if (unanswered > 0) {
+    var mb = document.getElementById('mb');
+    if (mb) {
+      mb.innerHTML = '<div class="text-center">' +
+        '<div class="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">' +
+        '<i data-lucide="alert-triangle" class="w-8 h-8 text-yellow-400"></i></div>' +
+        '<h3 class="text-xl font-bold text-yellow-400 mb-2">Masih Ada Soal Belum Dijawab!</h3>' +
+        '<p class="text-sm text-gray-400 mb-4">Anda <strong class="text-white">tidak dapat mengumpulkan</strong> ujian karena masih ada <strong class="text-yellow-300">' + unanswered + ' soal</strong> yang belum dijawab.</p>' +
+        '<div class="bg-white/5 rounded-xl p-4 mb-4 max-h-48 overflow-y-auto">' +
+        '<p class="text-xs text-gray-400 mb-3 text-left">Nomor soal yang belum dijawab:</p>' +
+        '<div class="flex flex-wrap gap-2 justify-center">' +
+        unansweredQ.map(function(n) {
+          return '<span class="w-9 h-9 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 flex items-center justify-center text-sm font-bold">' + n + '</span>';
+        }).join('') +
+        '</div></div>' +
+        (raguC > 0 ? '<p class="text-xs text-yellow-400 mb-3 bg-yellow-500/10 rounded-lg p-2">⚠ Ada ' + raguC + ' soal yang Anda tandai ragu-ragu.</p>' : '') +
+        '<p class="text-xs text-gray-500 mb-4">Silakan klik nomor soal di atas atau periksa kembali seluruh jawaban Anda.</p>' +
+        '<button onclick="hiM(\'mg\')" class="bp px-6 py-3 rounded-xl font-semibold w-full">Periksa Kembali</button>' +
+        '</div>';
+      shM('mg');
+      ic();
+    }
+    return;
+  }
+  
+  var msg = '✅ Semua soal sudah dijawab.\n';
+  if (raguC > 0) {
+    msg += '⚠ Perhatian: Ada ' + raguC + ' soal yang Anda tandai ragu.\n';
+  }
+  msg += 'Yakin ingin mengumpulkan ujian sekarang?';
+  
+  if (!confirm(msg)) return;
+  
+  // ✅ Set flag SEBELUM submit untuk mencegah race condition
+  EX._submitting = true;
+  EX.submit();
 };
 EX.submit = function() {
-if (EX._submitted) return;
-EX._submitted = true;
-if (EX.timer) clearInterval(EX.timer);
-cAC(); LM.hideAll(); document.body.classList.remove('exam-active');
-var se = document.getElementById('se'); if(se) { se.classList.remove('hidden'); se.style.display = 'flex'; }
-var eq = document.getElementById('eq'); if (eq) eq.innerHTML = ldH();
-var finalAnswers = {};
-for (var qid in EX.answers) {
-var ans = EX.answers[qid];
-var q = EX.soal.find(function(x) { return x.id === qid; });
-if (!q) continue;
-if (q.jenis === 'pg' && EX.mapJawaban[qid]) {
-finalAnswers[qid] = EX.mapJawaban[qid][ans] || ans;
-} else if (q.jenis === 'menjodohkan' && EX.mapKanan[qid]) {
-var pairs = ans.split('|').filter(Boolean);
-var translated = pairs.map(function(p) { var parts = p.split(','); return parts[0] + ',' + EX.mapKanan[qid][parts[1]]; });
-finalAnswers[qid] = translated.join('|');
-} else if (q.jenis === 'menyusun' && EX.mapSusun[qid]) {
-var items = ans.split('|').filter(Boolean);
-var translated = items.map(function(idxAcak) { return EX.mapSusun[qid][idxAcak]; });
-finalAnswers[qid] = translated.join('|');
-} else {
-finalAnswers[qid] = ans;
-}
-}
-G('submitExam', {
-ujian_id: EX.ujian.id,
-siswa_id: U.id,
-siswa_nama: U.nama,
-nis: U.username,
-kelas: U.kelas,
-jawaban: JSON.stringify(finalAnswers),
-waktu_mulai: new Date(EX.st).toISOString(),
-waktu_selesai: new Date().toISOString(),
-token: EX.token,
-pelanggaran: EX.vc
-}).then(function(r) {
-if (!r.s) {
-if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center"><p class="text-red-400 text-lg mb-4">' + esc(r.error) + '</p><button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali</button></div>';
-return;
-}
-var d = r.d;
-if (d.status === 'perlu_penilaian') {
-if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center asu">' +
-'<div class="w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-6"><i data-lucide="clock" class="w-10 h-10 text-yellow-400"></i></div>' +
-'<h2 class="text-2xl font-bold mb-2">Ujian Selesai!</h2>' +
-'<p class="text-gray-400 mb-6">' + esc(EX.ujian.nama) + '</p>' +
-'<div class="text-3xl font-extrabold text-yellow-400 mb-4">Nilai Sedang Diproses</div>' +
-'<p class="text-sm text-gray-400 mb-2">Jawaban essay Anda sedang menunggu penilaian manual dari guru.</p>' +
-'<div class="text-xs text-gray-500 mb-6 bg-white/5 inline-block px-4 py-2 rounded-lg">Jawaban Otomatis: Benar ' + d.benar + ' | Salah ' + d.salah + '</div><br>' +
-'<button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold mt-4">Kembali ke Dashboard</button>' +
-'</div>';
-} else {
-var sk = parseInt(d.nilai) || 0;
-var skorMax = parseInt(d.skor_max) || sk;
-var pct = parseInt(d.persentase) || 0;
-var cl = pct >= 90 ? 'text-green-400' : pct >= 80 ? 'text-blue-400' : pct >= 70 ? 'text-yellow-400' : 'text-red-400';
-var gr = pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'D';
-if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center asu">' +
-'<div class="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6"><i data-lucide="check-circle" class="w-10 h-10 text-green-400"></i></div>' +
-'<h2 class="text-2xl font-bold mb-2">Ujian Selesai!</h2>' +
-'<p class="text-gray-400 mb-6">' + esc(EX.ujian.nama) + '</p>' +
-'<div class="text-6xl font-extrabold ' + cl + ' mb-2">' + sk + '<span class="text-2xl text-gray-500"> / ' + skorMax + '</span></div>' +
-'<div class="text-sm text-gray-400 mb-1">Grade: <span class="font-bold text-white">' + gr + '</span> (' + pct + '%)</div>' +
-'<div class="text-xs text-gray-500 mb-6">Benar: ' + d.benar + ' | Salah: ' + d.salah + '</div>' +
-'<button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali ke Dashboard</button>' +
-'</div>';
-}
-ic();
-}).catch(function(err) {
-if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center"><p class="text-red-400 text-lg mb-4">Gagal: ' + esc(err) + '</p><button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali</button></div>';
-});
+  // ✅ Triple-check untuk mencegah double submit
+  if (EX._submitted) {
+    console.log('Submit sudah diproses, diabaikan');
+    return;
+  }
+  if (EX._submitting) {
+    console.log('Submit sedang berlangsung, diabaikan');
+    return;
+  }
+  
+  EX._submitting = true;
+  EX._submitted = true;
+  
+  if (EX.timer) clearInterval(EX.timer);
+  cAC(); 
+  LM.hideAll(); 
+  document.body.classList.remove('exam-active');
+  
+  var se = document.getElementById('se'); 
+  if(se) { se.classList.remove('hidden'); se.style.display = 'flex'; }
+  
+  var eq = document.getElementById('eq'); 
+  if (eq) eq.innerHTML = ldH();
+  
+  // Proses jawaban (kode asli Anda)
+  var finalAnswers = {};
+  for (var qid in EX.answers) {
+    var ans = EX.answers[qid];
+    var q = EX.soal.find(function(x) { return x.id === qid; });
+    if (!q) continue;
+    
+    if (q.jenis === 'pg' && EX.mapJawaban[qid]) {
+      finalAnswers[qid] = EX.mapJawaban[qid][ans] || ans;
+    } else if (q.jenis === 'menjodohkan' && EX.mapKanan[qid]) {
+      var pairs = ans.split('|').filter(Boolean);
+      var translated = pairs.map(function(p) { 
+        var parts = p.split(','); 
+        return parts[0] + ',' + EX.mapKanan[qid][parts[1]]; 
+      });
+      finalAnswers[qid] = translated.join('|');
+    } else if (q.jenis === 'menyusun' && EX.mapSusun[qid]) {
+      var items = ans.split('|').filter(Boolean);
+      var translated = items.map(function(idxAcak) { 
+        return EX.mapSusun[qid][idxAcak]; 
+      });
+      finalAnswers[qid] = translated.join('|');
+    } else {
+      finalAnswers[qid] = ans;
+    }
+  }
+  
+  // ✅ Kirim ke backend dengan timestamp server-side validation
+  G('submitExam', {
+    ujian_id: EX.ujian.id,
+    siswa_id: U.id,
+    siswa_nama: U.nama,
+    nis: U.username,
+    kelas: U.kelas,
+    jawaban: JSON.stringify(finalAnswers),
+    waktu_mulai: new Date(EX.st).toISOString(),
+    waktu_selesai: new Date().toISOString(),
+    token: EX.token,
+    pelanggaran: EX.vc,
+    client_checksum: btoa(EX.ujian.id + ':' + U.id + ':' + EX.st) // ✅ Untuk validasi server
+  })
+  .then(function(r) {
+    EX._submitting = false;
+    
+    if (!r.s) {
+      // ✅ Jika error karena sudah pernah submit, tampilkan pesan yang jelas
+      if (r.error && r.error.indexOf('sudah') !== -1) {
+        if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center">' +
+          '<p class="text-yellow-400 text-lg mb-4">⚠ ' + esc(r.error) + '</p>' +
+          '<button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali</button></div>';
+      } else {
+        if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center">' +
+          '<p class="text-red-400 text-lg mb-4">' + esc(r.error) + '</p>' +
+          '<button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali</button></div>';
+      }
+      return;
+    }
+    
+    // Tampilkan hasil (kode asli Anda - tidak berubah)
+    var d = r.d;
+    if (d.status === 'perlu_penilaian') {
+      if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center asu">' +
+        '<div class="w-20 h-20 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-6"><i data-lucide="clock" class="w-10 h-10 text-yellow-400"></i></div>' +
+        '<h2 class="text-2xl font-bold mb-2">Ujian Selesai!</h2>' +
+        '<p class="text-gray-400 mb-6">' + esc(EX.ujian.nama) + '</p>' +
+        '<div class="text-3xl font-extrabold text-yellow-400 mb-4">Nilai Sedang Diproses</div>' +
+        '<p class="text-sm text-gray-400 mb-2">Jawaban essay Anda sedang menunggu penilaian manual dari guru.</p>' +
+        '<div class="text-xs text-gray-500 mb-6 bg-white/5 inline-block px-4 py-2 rounded-lg">Jawaban Otomatis: Benar ' + d.benar + ' | Salah ' + d.salah + '</div><br>' +
+        '<button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold mt-4">Kembali ke Dashboard</button>' +
+        '</div>';
+    } else {
+      var sk = parseInt(d.nilai) || 0;
+      var skorMax = parseInt(d.skor_max) || sk;
+      var pct = parseInt(d.persentase) || 0;
+      var cl = pct >= 90 ? 'text-green-400' : pct >= 80 ? 'text-blue-400' : pct >= 70 ? 'text-yellow-400' : 'text-red-400';
+      var gr = pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : 'D';
+      if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center asu">' +
+        '<div class="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6"><i data-lucide="check-circle" class="w-10 h-10 text-green-400"></i></div>' +
+        '<h2 class="text-2xl font-bold mb-2">Ujian Selesai!</h2>' +
+        '<p class="text-gray-400 mb-6">' + esc(EX.ujian.nama) + '</p>' +
+        '<div class="text-6xl font-extrabold ' + cl + ' mb-2">' + sk + '<span class="text-2xl text-gray-500"> / ' + skorMax + '</span></div>' +
+        '<div class="text-sm text-gray-400 mb-1">Grade: <span class="font-bold text-white">' + gr + '</span> (' + pct + '%)</div>' +
+        '<div class="text-xs text-gray-500 mb-6">Benar: ' + d.benar + ' | Salah: ' + d.salah + '</div>' +
+        '<button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali ke Dashboard</button>' +
+        '</div>';
+    }
+    ic();
+    
+    // ✅ Flush cache agar dashboard update
+    flushCache();
+  })
+  .catch(function(err) {
+    EX._submitting = false;
+    if (eq) eq.innerHTML = '<div class="gs rounded-xl p-8 text-center"><p class="text-red-400 text-lg mb-4">Gagal: ' + esc(err) + '</p><button onclick="AU.out()" class="bp px-6 py-3 rounded-xl font-semibold">Kembali</button></div>';
+  });
 };
 var _blurCooldown = false;
 function sAC() {
